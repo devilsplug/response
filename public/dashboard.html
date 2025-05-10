@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bopimo Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Welcome to Bopimo Dashboard</h1>
+    <nav>
+      <a href="/customize.html">Customize Avatar</a>
+      <a href="/">Back to Home</a>
+    </nav>
+  </header>
+  <section>
+    <h2>Your Profile</h2>
+    <div id="profile"></div>
+    <h2>Your Levels</h2>
+    <div id="levels"></div>
+  </section>
+  <script>
+    const token = localStorage.getItem('token');
+    fetch('/api/levels', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(levels => {
+      const container = document.getElementById('levels');
+      container.innerHTML = levels.map(lvl => 
+        '<div><strong>' + lvl.name + '</strong></div>').join('');
+    });
+  </script>
+</body>
+</html>

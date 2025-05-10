@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Profile - Bopimo</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    #profile { padding: 20px; text-align: center; }
+    #avatar-preview canvas { display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>User Profile</h1>
+    <nav>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/level-editor.html">Level Editor</a>
+    </nav>
+  </header>
+  <div id="profile">
+    <h2 id="username">Loading...</h2>
+    <div id="avatar-preview"></div>
+    <h3>Recent Levels</h3>
+    <div id="user-levels"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
+
+    const token = localStorage.getItem('token');
+    const headers = { 'Authorization': 'Bearer ' + token };
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(200, 200);
+    document.getElementById('avatar-preview').appendChild(renderer.domElement);
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(2, 4, 5);
+    scene.add(light);
+
+    fetch('/api/avatars', { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (data.length > 0) {
+          const user = data[data.length - 1];
+          document.getElementById('username').innerText = "You";
+
+          const skin = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 32, 32),
+            new THREE.MeshStandardMaterial({ color: user.skinColor || 0xffccaa })
+          );
+          skin.position.y = 1;
+          scene.add(skin);
+
+          if (user.shirt && user.shirt !== 'none') {
+            const shirt = new THREE.Mesh(
+              new THREE.CylinderGeometry(1, 1, 1, 32),
+              new THREE.MeshStandardMaterial({ color: user.shirt === 'red' ? 0xff0000 : 0x0000ff })
+            );
+            shirt.position.y = 0.2;
+            scene.add(shirt);
+          }
+
+          if (user.hat === 'cone') {
+            const hat = new THREE.Mesh(
+              new THREE.ConeGeometry(0.5, 1, 32),
+              new THREE.MeshStandardMaterial({ color: 0x8800ff })
+            );
+            hat.position.y = 2;
+            scene.add(hat);
+          } else if (user.hat === 'cube') {
+            const hat = new THREE.Mesh(
+              new THREE.BoxGeometry(0.8, 0.4, 0.8),
+              new THREE.MeshStandardMaterial({ color: 0x00ffff })
+            );
+            hat.position.y = 2;
+            scene.add(hat);
+          }
+        }
+      });
+
+    fetch('/api/levels', { headers })
+      .then(res => res.json())
+      .then(levels => {
+        const container = document.getElementById('user-levels');
+        levels.reverse().slice(0, 5).forEach(lvl => {
+          const div = document.createElement('div');
+          div.textContent = lvl.name || "Unnamed Level";
+          container.appendChild(div);
+        });
+      });
+
+    camera.position.z = 5;
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bopimo Level Editor</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    canvas { display: block; margin: 0 auto; background: #fff; }
+    #editor-ui { text-align: center; margin: 10px; }
+    select, button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Level Editor (Multiplayer)</h1>
+    <nav>
+      <a href="/dashboard.html">Dashboard</a>
+    </nav>
+  </header>
+  <div id="editor-ui">
+    <label>Block Type:
+      <select id="blockType">
+        <option value="basic">Basic</option>
+        <option value="goal">Goal</option>
+        <option value="hazard">Hazard</option>
+      </select>
+    </label>
+    <button onclick="saveLevel()">Save Level</button>
+  </div>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@0.150.1/examples/jsm/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth * 0.9, window.innerHeight * 0.6);
+    document.body.appendChild(renderer.domElement);
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+
+const footstepSound = new THREE.Audio(listener);
+const jumpSound = new THREE.Audio(listener);
+
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load('/sounds/footstep.mp3', (buffer) => {
+  footstepSound.setBuffer(buffer);
+  footstepSound.setVolume(0.6);
+});
+audioLoader.load('/sounds/jump.mp3', (buffer) => {
+  jumpSound.setBuffer(buffer);
+  jumpSound.setVolume(0.7);
+});
+
+function playFootstep() {
+  if (footstepSound.isPlaying) footstepSound.stop();
+  footstepSound.play();
+}
+
+function playJump() {
+  if (jumpSound.isPlaying) jumpSound.stop();
+  jumpSound.play();
+}
+
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.zoomSpeed = 0.5;
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7.5);
+    scene.add(light);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const blocks = [];
+
+    const gridSize = 10;
+    const blockSize = 1;
+
+    const blockMaterials = {
+      basic: new THREE.MeshStandardMaterial({ color: 0x888888 }),
+      goal: new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
+      hazard: new THREE.MeshStandardMaterial({ color: 0xff0000 })
+    };
+
+    function placeBlock(x, y, z, type, broadcast = true) {
+      const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+      const block = new THREE.Mesh(geometry, blockMaterials[type]);
+      block.position.set(x, y, z);
+      block.userData = { type, x, y, z };
+      scene.add(block);
+      blocks.push(block);
+      if (broadcast && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ action: "place", block: block.userData }));
+      }
+    }
+
+    window.addEventListener('click', (event) => {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(blocks);
+      if (intersects.length > 0) return;
+
+      const blockType = document.getElementById('blockType').value;
+      const x = Math.floor((mouse.x + 1) * gridSize / 2) - gridSize / 2;
+      const z = Math.floor((mouse.y + 1) * gridSize / 2) - gridSize / 2;
+      placeBlock(x, 0, z, blockType);
+    });
+
+    camera.position.set(5, 5, 10);
+    camera.lookAt(0, 0, 0);
+
+    let avatar;
+
+let walkAngle = 0;
+let walkSpeed = 0.1;
+
+    const token = localStorage.getItem('token');
+    fetch('/api/avatars', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.length > 0) {
+        const user = data[data.length - 1];
+        const body = new THREE.Mesh(
+          new THREE.SphereGeometry(1, 32, 32),
+          new THREE.MeshStandardMaterial({ color: user.skinColor || 0xffccaa })
+        );
+        body.position.y = 1;
+        scene.add(body);
+        avatar = body;
+
+        if (user.shirt && user.shirt !== 'none') {
+          const color = user.shirt === 'red' ? 0xff0000 : 0x0000ff;
+          const shirt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 32),
+            new THREE.MeshStandardMaterial({ color }));
+          shirt.position.y = 0.2;
+          scene.add(shirt);
+        }
+
+        if (user.hat === 'cone') {
+          const hat = new THREE.Mesh(
+            new THREE.ConeGeometry(0.5, 1, 32),
+            new THREE.MeshStandardMaterial({ color: 0x8800ff })
+          );
+          hat.position.y = 2;
+          scene.add(hat);
+        } else if (user.hat === 'cube') {
+          const hat = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.4, 0.8),
+            new THREE.MeshStandardMaterial({ color: 0x00ffff })
+          );
+          hat.position.y = 2;
+          scene.add(hat);
+        }
+      }
+    });
+
+        const labelDiv = document.createElement('div');
+        labelDiv.style.position = 'absolute';
+        labelDiv.style.color = 'black';
+        labelDiv.style.fontSize = '12px';
+        labelDiv.style.pointerEvents = 'none';
+        document.body.appendChild(labelDiv);
+
+        function updateLabelPosition() {
+          if (avatar) {
+            const vector = avatar.position.clone().project(camera);
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+            labelDiv.style.left = x + 'px';
+            labelDiv.style.top = y - 20 + 'px';
+            labelDiv.innerText = "You";
+          }
+        }
+
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        chatInput.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            const msg = chatInput.value.trim();
+            if (msg && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ action: "chat", message: msg }));
+              appendMessage("You: " + msg);
+              chatInput.value = "";
+            }
+          }
+        });
+
+        function appendMessage(msg) {
+          const el = document.createElement('div');
+          el.textContent = msg;
+          chatMessages.appendChild(el);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        function updateAvatarMovement() {
+          if (!avatar) return;
+          
+const step = 0.1;
+let moved = false;
+if (keys['w']) { avatar.position.z -= step; moved = true; }
+if (keys['s']) { avatar.position.z += step; moved = true; }
+if (keys['a']) { avatar.position.x -= step; moved = true; }
+if (keys['d']) { avatar.position.x += step; moved = true; }
+if (moved) playFootstep();
+if (keys[' ']) playJump();
+
+          if (keys['w']) avatar.position.z -= step;
+          if (keys['s']) avatar.position.z += step;
+          if (keys['a']) avatar.position.x -= step;
+          if (keys['d']) avatar.position.x += step;
+
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+              action: "move",
+              pos: { x: avatar.position.x, y: avatar.position.y, z: avatar.position.z }
+            }));
+          }
+        }
+
+        
+        const otherLabels = new Map();
+        const otherAvatars = new Map();
+
+        function updateOtherLabels() {
+          otherAvatars.forEach((obj, id) => {
+            if (!otherLabels.has(id)) {
+              const label = document.createElement('div');
+              label.style.position = 'absolute';
+              label.style.color = 'blue';
+              label.style.fontSize = '12px';
+              label.textContent = id;
+              document.body.appendChild(label);
+              otherLabels.set(id, label);
+            }
+            const label = otherLabels.get(id);
+            const vector = obj.position.clone().project(camera);
+            label.style.left = (vector.x * 0.5 + 0.5) * window.innerWidth + 'px';
+            label.style.top = (-vector.y * 0.5 + 0.5) * window.innerHeight - 20 + 'px';
+          });
+        }
+
+        // Graphic settings
+        const lightToggle = document.getElementById('toggleLight');
+        const aaToggle = document.getElementById('toggleAA');
+
+        lightToggle.addEventListener('change', () => {
+          light.visible = lightToggle.checked;
+        });
+
+
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      if (avatar) avatar.rotation.y += 0.01;
+      updateAvatarMovement();
+      updateLabelPosition();
+      updateLabelPosition();
+      updateOtherLabels();
+      
+      if (avatar && avatar.children.length >= 6) {
+        const [head, torso, leftArm, rightArm, leftLeg, rightLeg] = avatar.children;
+        walkAngle += walkSpeed;
+        const swing = Math.sin(walkAngle) * 0.5;
+
+        if (keys['w'] || keys['a'] || keys['s'] || keys['d']) {
+          leftArm.rotation.x = swing;
+          rightArm.rotation.x = -swing;
+          leftLeg.rotation.x = -swing;
+          rightLeg.rotation.x = swing;
+        } else {
+          leftArm.rotation.x = 0;
+          rightArm.rotation.x = 0;
+          leftLeg.rotation.x = 0;
+          rightLeg.rotation.x = 0;
+        }
+      }
+
+      if (avatar && avatar.emote) performEmote(avatar.emote);
+      renderer.render(scene, camera);
+    }
+
+    function saveLevel() {
+      const levelData = blocks.map(b => b.userData);
+      fetch('/api/levels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          name: "My Custom Level",
+          blocks: levelData
+        })
+      }).then(() => alert("Level saved!"));
+    }
+
+    // Basic WebSocket for multiplayer preview
+    const socket = new WebSocket("ws://localhost:8080"); // placeholder echo server
+    socket.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      
+      if (data.action === "move") {
+        const id = data.id || "other";
+        let av = otherAvatars.get(id);
+        if (!av) {
+          av = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xffff00 })
+          );
+          scene.add(av);
+          otherAvatars.set(id, av);
+        }
+        av.position.set(data.pos.x, data.pos.y, data.pos.z);
+      }
+
+      
+      if (data.action === "chat") {
+        appendMessage("Player: " + data.message);
+      }
+
+      
+      if (data.action === "move") {
+        const id = data.id || "player_" + Math.floor(Math.random() * 10000);
+        let av = otherAvatars.get(id);
+        if (!av) {
+          av = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xffff00 })
+          );
+          scene.add(av);
+          otherAvatars.set(id, av);
+        }
+        av.position.set(data.pos.x, data.pos.y, data.pos.z);
+      }
+
+      if (data.action === "place") {
+        const b = data.block;
+        placeBlock(b.x, b.y, b.z, b.type, false);
+      }
+    };
+
+    animate();
+updateNPCMovement();
+  </script>
+
+  <div id="chat-box" style="position: absolute; bottom: 10px; left: 10px; width: 300px; background: #ffffffcc; padding: 5px; border-radius: 5px;">
+    <div id="chat-messages" style="height: 100px; overflow-y: auto; font-family: monospace;"></div>
+    <input type="text" id="chat-input" placeholder="Type a message..." style="width: 100%;" />
+  </div>
+
+
+  <div id="graphics-settings" style="position: absolute; top: 10px; right: 10px; background: #ffffffcc; padding: 5px; border-radius: 5px;">
+    <label><input type="checkbox" id="toggleAA" checked /> Antialiasing</label><br/>
+    <label><input type="checkbox" id="toggleLight" checked /> Lighting</label>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Customize Bopi (Roblox Style)</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    canvas { display: block; margin: 0 auto; background: #fff; }
+    #customizer { text-align: center; margin: 20px; }
+    select, input, button { margin: 0.5em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Customize Your Bopi (Roblox Style)</h1>
+    <nav>
+      <a href="/dashboard.html">Dashboard</a>
+    </nav>
+  </header>
+  <div id="customizer">
+    <label>Head Color:
+      <input type="color" id="headColor" value="#ffccaa" />
+    </label>
+    <label>Torso Color:
+      <input type="color" id="torsoColor" value="#00ff00" />
+    </label>
+    <label>Arm Color:
+      <input type="color" id="armColor" value="#0000ff" />
+    </label>
+    <label>Leg Color:
+      <input type="color" id="legColor" value="#0000ff" />
+    </label>
+    <label>Hat:
+      <select id="hat">
+        <option value="none">None</option>
+        <option value="true">Yes</option>
+      </select>
+    </label>
+    <label>Hat Color:
+      <input type="color" id="hatColor" value="#000000" />
+    </label>
+    <button onclick="saveCustomization()">Save</button>
+  </div>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
+    import { createAvatar } from './avatar.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.6);
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+
+const sound = new THREE.Audio(listener);
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load('/sounds/ambient.mp3', function(buffer) {
+  sound.setBuffer(buffer);
+  sound.setLoop(true);
+  sound.setVolume(0.3);
+  sound.play();
+});
+
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(2, 4, 5);
+    scene.add(light);
+
+    let avatar;
+    function updateAvatar() {
+      if (avatar) scene.remove(avatar);
+      const options = {
+        headColor: document.getElementById('headColor').value,
+        torsoColor: document.getElementById('torsoColor').value,
+        armColor: document.getElementById('armColor').value,
+        legColor: document.getElementById('legColor').value,
+        hat: document.getElementById('hat').value === "true",
+        hatColor: document.getElementById('hatColor').value
+      };
+      avatar = createAvatar(options);
+      scene.add(avatar);
+    }
+
+    // Bind change events
+    document.querySelectorAll('#customizer input, #customizer select').forEach(el =>
+      el.addEventListener('change', updateAvatar)
+    );
+
+    // Initial avatar
+    updateAvatar();
+
+    camera.position.z = 5;
+    function animate() {
+      requestAnimationFrame(animate);
+      if (avatar) avatar.rotation.y += 0.01;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    function saveCustomization() {
+      const token = localStorage.getItem('token');
+      const data = {
+        headColor: document.getElementById('headColor').value,
+        torsoColor: document.getElementById('torsoColor').value,
+        armColor: document.getElementById('armColor').value,
+        legColor: document.getElementById('legColor').value,
+        hat: document.getElementById('hat').value === "true",
+        hatColor: document.getElementById('hatColor').value
+      };
+      fetch('/api/avatars', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify(data)
+      }).then(() => alert("Customization saved!"));
+    }
+  </script>
+</body>
+</html>
